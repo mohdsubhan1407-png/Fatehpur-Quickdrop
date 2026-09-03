@@ -19,4 +19,6 @@ async function status(id,s){await fetch('/api/orders/'+id+'/status',{method:'POS
 function maps(){let p=encodeURIComponent($('pickup').value),d=encodeURIComponent($('dropoff').value);if(!p||!d)return;window.open('https://www.google.com/maps/dir/?api=1&origin='+p+'&destination='+d,'_blank')}
 async function logout(){await fetch('/api/logout',{method:'POST'});show('customerLogin')}
 document.addEventListener('keydown',e=>{if(e.shiftKey&&e.altKey&&e.key.toLowerCase()==='s')show('staff')});
-</script></body></html>
+</script></body></html>document.addEventListener('keydown',e=>(e.shiftKey&&e.altKey&&e.key.toLowerCase()==='s')show('staff'));</script>let t=0,lt=0;document.querySelector('header').addEventListener('click',()=>{let c=Date.now();if(c-lt>2000)t=1;else t++;lt=c;if(t===5){t=0;show('staff');}});
+</body></html>
+
