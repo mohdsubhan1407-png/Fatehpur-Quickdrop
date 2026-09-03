@@ -1,24 +1,80 @@
-<!doctype html><html><head><meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1"><title>Fatehpur QuickDrop</title><style>body{font-family:system-ui;margin:0;background:#f5f7fb;color:#111}header{background:#111827;color:white;padding:22px}main{max-width:760px;margin:auto;padding:18px}.card{background:white;padding:18px;border-radius:16px;margin:14px 0;box-shadow:0 3px 15px #0001}input,select,button{width:100%;padding:12px;margin:7px 0;border-radius:10px;border:1px solid #ddd;box-sizing:border-box}button{background:#111827;color:white;border:0;font-weight:700}.muted{color:#667085}.hidden{display:none}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.badge{display:inline-block;padding:5px 9px;border-radius:20px;background:#eef2ff}.order{border:1px solid #eee;padding:12px;border-radius:12px;margin:9px 0}</style></head>
-  <body><header><b>🚚 Fatehpur QuickDrop</b><div>Fast. Local. Delivered.</div></header><main>
-<section id="customerLogin" class="card"><h2>Customer Login</h2><input id="mobile" placeholder="Mobile number" inputmode="numeric"><button onclick="sendOtp()">Send OTP</button><div id="otpBox" class="hidden"><input id="otp" placeholder="Enter OTP" inputmode="numeric"><button onclick="verifyOtp()">Verify OTP</button></div><p id="msg" class="muted"></p><small class="muted">OTP is sent by SMS when configured; otherwise a development OTP is shown.</small></section>
-<section id="customer" class="hidden"><div class="card"><h2>Book a Delivery</h2><input id="pickup" placeholder="Pickup address"><input id="dropoff" placeholder="Delivery address"><div class="row"><input id="km" type="number" min="1" step="0.1" placeholder="Distance (km)"><input id="weight" type="number" min="0" placeholder="Weight (kg)"></div><select id="type"><option>Parcel</option><option>Document</option><option>Food</option></select><button onclick="calc()">Calculate Fare</button><h3 id="fare">₹0</h3><button onclick="book()">Book Now</button><button onclick="maps()">Open Route in Maps</button></div><div class="card"><h2>My Orders</h2><div id="orders"></div></div><button onclick="logout()">Logout</button></section>
-<section id="staff" class="hidden"><div class="card"><h2>Staff Login</h2><select id="role"><option value="partner">Delivery Partner</option><option value="admin">Admin</option></select><input id="su" placeholder="Username"><input id="sp" type="password" placeholder="Password"><button onclick="staffLogin()">Login</button><p id="sm" class="muted"></p></div></section>
-<section id="dash" class="hidden"><div class="card"><h2 id="dashTitle"></h2><button onclick="loadDash()">Refresh</button><div id="dashOrders"></div><button onclick="logout()">Logout</button></div></section>
-</main><script>
-let fare=0;const $=id=>document.getElementById(id);function show(id){['customerLogin','customer','staff','dash'].forEach(x=>$(x).classList.add('hidden'));$(id).classList.remove('hidden')}
-async function sendOtp(){let phone=$('mobile').value.trim();if(!phone)return $('msg').textContent='Enter mobile number';let r=await fetch('/api/customer/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});let x=await r.json();if(!r.ok)return $('msg').textContent=x.error||'Could not send OTP';$('otpBox').classList.remove('hidden');$('msg').textContent=x.sent?'OTP sent by SMS':'Demo OTP: '+x.devOtp}
-async function verifyOtp(){let r=await fetch('/api/customer/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:$('mobile').value.trim(),code:$('otp').value.trim()})});let x=await r.json();if(!r.ok)return $('msg').textContent=x.error||'Invalid OTP';show('customer');loadOrders()}
-function calc(){let km=+($('km').value||0),w=+($('weight').value||0);fare=Math.max(49,49+Math.max(0,km-2)*10+Math.max(0,w-1)*15);$('fare').textContent='₹'+fare}
-async function book(){if(!$('pickup').value||!$('dropoff').value)return alert('Enter pickup and delivery address');if(!fare)calc();let r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:$('mobile').value,p:$('pickup').value,d:$('dropoff').value,km:+$('km').value,type:$('type').value,weightExtra:Math.max(0,+$('weight').value-1),price:fare})});let x=await r.json();if(r.ok){alert('Order booked: '+x.id);loadOrders()}else alert(x.error||'Booking failed')}
-async function loadOrders(){let r=await fetch('/api/orders');if(!r.ok)return;let a=await r.json();$('orders').innerHTML=a.length?a.map(o=>`<div class="order"><b>${o.id}</b> <span class="badge">${o.status}</span><br>${o.p} → ${o.d}<br>₹${String(o.price).replace('₹','')} · ${o.km||0} km<br><small>Partner: ${o.assignedTo||'Not assigned'}</small></div>`).join(''):'No orders yet.'}
-async function staffLogin(){let r=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('su').value,password:$('sp').value})});let x=await r.json();if(!r.ok)return $('sm').textContent=x.error;show('dash');$('dashTitle').textContent=x.user.role==='admin'?'Admin Dashboard':'Delivery Partner Dashboard';loadDash()}
-async function loadDash(){let me=await fetch('/api/me').then(r=>r.json());if(!me.authenticated)return show('staff');let a=await fetch('/api/orders').then(r=>r.json());$('dashOrders').innerHTML=a.length?a.map(o=>`<div class="order"><b>${o.id}</b> <span class="badge">${o.status}</span><br>${o.customer}: ${o.p} → ${o.d}<br>₹${o.price} · ${o.km||0} km<br>${me.user.role==='admin'?`<button onclick="assign('${o.id}')">Assign to partner</button>`:''}${me.user.role==='partner'?`<button onclick="status('${o.id}','Accepted')">Accept</button><button onclick="status('${o.id}','Out for delivery')">Out for delivery</button><button onclick="status('${o.id}','Delivered')">Delivered</button>`:''}</div>`).join(''):'No orders.'}
-async function assign(id){let u=prompt('Partner username','partner');if(!u)return;await fetch('/api/orders/'+id+'/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u})});loadDash()}
-async function status(id,s){await fetch('/api/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s})});loadDash()}
-function maps(){let p=encodeURIComponent($('pickup').value),d=encodeURIComponent($('dropoff').value);if(!p||!d)return;window.open('https://www.google.com/maps/dir/?api=1&origin='+p+'&destination='+d,'_blank')}
-async function logout(){await fetch('/api/logout',{method:'POST'});show('customerLogin')}
-document.addEventListener('keydown',e=>{if(e.shiftKey&&e.altKey&&e.key.toLowerCase()==='s')show('staff')});
-</script></body></html>document.addEventListener('keydown',e=>(e.shiftKey&&e.altKey&&e.key.toLowerCase()==='s')show('staff'));</script>let t=0,lt=0;document.querySelector('header').addEventListener('click',()=>{let c=Date.now();if(c-lt>2000)t=1;else t++;lt=c;if(t===5){t=0;show('staff');}});
-</body></html>
+<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fatehpur QuickDrop</title>
+<style>
+body{font-family:sans-serif;background:#f4f4f9;margin:0;padding:0}
+.card{background:#fff;padding:20px;margin:20px auto;max-width:400px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+.hidden{display:none}
+header{background:#111827;color:#fff;padding:15px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <b>🚚 Fatehpur QuickDrop</b>
+  <div>Fast. Local. Delivered.</div>
+  <div style="margin-top:10px;">
+    <button onclick="show('customerLogin')" style="background:#fff;color:#111827;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;margin:2px;font-size:12px;font-weight:bold;">Customer</button>
+    <button onclick="show('staff')" style="background:#3b82f6;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;margin:2px;font-size:12px;font-weight:bold;">Admin / Partner</button>
+  </div>
+</header>
+<main>
+  <section id="customerLogin" class="card">
+    <h2>Customer Login</h2>
+    <input id="mobile" placeholder="Mobile number" inputmode="numeric" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box;">
+    <button onclick="sendOtp()" style="width:100%;padding:10px;background:#111827;color:#fff;border:none;border-radius:4px;">Send OTP</button>
+    <div id="msg" style="margin-top:10px;color:red;"></div>
+  </section>
 
+  <section id="customer" class="hidden">
+    <div class="card">
+      <h2>Book a Delivery</h2>
+      <input id="pickup" placeholder="Pickup address" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box;">
+      <input id="dropoff" placeholder="Dropoff address" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box;">
+      <input id="km" placeholder="Distance in KM" type="number" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box;">
+      <input id="weight" placeholder="Weight in KG" type="number" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box;">
+      <button onclick="calc()" style="width:100%;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:4px;margin-bottom:10px;">Calculate Fare</button>
+      <div id="fare" style="font-weight:bold;margin-bottom:10px;"></div>
+      <button onclick="book()" style="width:100%;padding:10px;background:#10b981;color:#fff;border:none;border-radius:4px;">Book Delivery</button>
+    </div>
+  </section>
+
+  <section id="staff" class="hidden">
+    <div class="card">
+      <h2>Staff Login</h2>
+      <select id="role" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box;">
+        <option value="partner">Delivery Partner</option>
+        <option value="admin">Admin</option>
+      </select>
+      <input id="username" placeholder="Username" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box;">
+      <input type="password" id="password" placeholder="Password" style="width:100%;padding:8px;margin-bottom:10px;box-sizing:border-box;">
+      <button onclick="staffLogin()" style="width:100%;padding:10px;background:#111827;color:#fff;border:none;border-radius:4px;">Login</button>
+    </div>
+  </section>
+
+  <section id="dash" class="hidden">
+    <div class="card">
+      <h2 id="dashTitle"></h2>
+      <button onclick="loadDash()" style="padding:6px 12px;margin-bottom:10px;">Refresh</button>
+      <div id="orders"></div>
+      <button onclick="logout()" style="margin-top:15px;padding:6px 12px;background:#ef4444;color:#fff;border:none;border-radius:4px;">Logout</button>
+    </div>
+  </section>
+</main>
+<script>
+let fare=0;
+const $=id=>document.getElementById(id);
+function show(id){['customerLogin','customer','staff','dash'].forEach(x=>$(x).classList.add('hidden'));$(id).classList.remove('hidden')}
+async function sendOtp(){let phone=$('mobile').value.trim();if(!phone)return $('msg').textContent='Enter mobile number';let r=await fetch('/api/customer/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});show('customer')}
+function calc(){let km=+($('km').value)||0,w=+($('weight').value)||0;fare=Math.max(49,49+Math.max(0,km-2)*10+Math.max(0,w-1)*15);$('fare').textContent='Fare: ₹'+fare}
+async function book(){if(!$('pickup').value||!$('dropoff').value)return alert('Enter pickup and delivery address');if(!fare)return alert('Calculate fare first');let r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pickup:$('pickup').value,dropoff:$('dropoff').value,fare,km:$('km').value,weight:$('weight').value})});if(r.ok){alert('Order booked!');show('dash');loadDash()}}
+async function staffLogin(){let r=await fetch('/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value,password:$('password').value,role:$('role').value})});if(r.ok)loadDash();else alert('Login failed')}
+async function loadDash(){let me=await fetch('/api/me').then(r=>r.json());if(!me.authenticated)return show('staff');let s=$('dashTitle');if(me.role==='admin'){s.textContent='Admin Dashboard';let r=await fetch('/api/orders');if(r.ok){let a=await r.json();$('orders').innerHTML=a.map(o=>`<div>ID: ${o.id} | ${o.pickup} ➔ ${o.dropoff} | ₹${o.fare} | Status: ${o.status} ${o.status==='pending'?'<button onclick="assign('+o.id+')">Assign</button>':''}</div>`).join('')}}else{s.textContent='Partner Dashboard';let r=await fetch('/api/orders');if(r.ok){let a=await r.json();$('orders').innerHTML=a.map(o=>`<div>ID: ${o.id} | ${o.pickup} ➔ ${o.dropoff} | ₹${o.fare} | Status: ${o.status} <select onchange="status(${o.id},this.value)"><option>Select</option><option value="accepted">Accept</option><option value="picked">Picked</option><option value="delivered">Delivered</option></select></div>`).join('')}}}
+async function assign(id){let u=prompt('Partner username','partner');if(!u)return;await fetch('/api/orders/'+id+'/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({partnerUsername:u})});loadDash()}
+async function status(id,s){await fetch('/api/orders/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s})});loadDash()}
+async function logout(){await fetch('/api/logout',{method:'POST'});show('customerLogin')}
+</script>
+</body>
+</html>
