@@ -29,3 +29,4 @@ if(req.method==='POST'&&req.url==='/api/logout')return json(res,200,{ok:true},{'
  json(res,404,{error:'Not found'});
 }catch(e){console.error(e);json(res,500,{error:'Server error'})}});
 server.listen(PORT,HOST,()=>console.log(`Fatehpur QuickDrop V14 running on http://localhost:${PORT}`));
+  
